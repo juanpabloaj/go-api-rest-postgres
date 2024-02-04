@@ -8,8 +8,13 @@ I added/changed a few things
 - [x] unit test with sqlmock.
 - [x] Dockerfile multistage.
 - [x] gitignore.
+- [x] [modd](https://github.com/cortesi/modd) to run the tests when a file is modified.
 
 
 Run test
 
     go test
+
+Watching the files and running the tests automatically with [modd](https://github.com/cortesi/modd)
+
+    modd
