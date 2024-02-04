@@ -59,6 +59,7 @@ func NewServer(db *sql.DB) *Server {
 	router := mux.NewRouter()
 	router.HandleFunc("/users", server.GetUsers).Methods("GET")
 	router.HandleFunc("/users", server.CreateUser).Methods("POST")
+	router.HandleFunc("/users/{id}", server.GetUser).Methods("GET")
 
 	server.DB = db
 	server.Router = router
@@ -113,5 +114,30 @@ func (s *Server) CreateUser(w http.ResponseWriter, r *http.Request) {
 	err = json.NewEncoder(w).Encode(u)
 	if err != nil {
 		log.Print(err)
+	}
+}
+
+func (s *Server) GetUser(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	userID := vars["id"]
+
+	var u User
+	err := s.DB.QueryRow(
+		"SELECT id, name, email FROM users WHERE id = $1", userID).
+		Scan(&u.ID, &u.Name, &u.Email)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		log.Print(err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	err = json.NewEncoder(w).Encode(u)
+	if err != nil {
+		log.Print(err)
+		w.WriteHeader(http.StatusInternalServerError)
 	}
 }
