@@ -29,18 +29,16 @@ func main() {
 		}
 	}()
 
+	server := NewServer(db)
+
 	_, err = db.Exec(
 		"CREATE TABLE IF NOT EXISTS users (id SERIAL PRIMARY KEY, name TEXT, email TEXT)")
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	router := mux.NewRouter()
-	router.HandleFunc("/users", getUsers(db)).Methods("GET")
-	router.HandleFunc("/users", createUser(db)).Methods("POST")
-
 	log.Println("starting ...")
-	log.Fatal(http.ListenAndServe(":8080", jsonContentTypeMiddleware(router)))
+	log.Fatal(http.ListenAndServe(":8080", jsonContentTypeMiddleware(server.Router)))
 }
 
 func jsonContentTypeMiddleware(next http.Handler) http.Handler {
@@ -50,56 +48,70 @@ func jsonContentTypeMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-func getUsers(db *sql.DB) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		rows, err := db.Query("SELECT * FROM users")
+type Server struct {
+	DB     *sql.DB
+	Router *mux.Router
+}
+
+func NewServer(db *sql.DB) *Server {
+	server := new(Server)
+
+	router := mux.NewRouter()
+	router.HandleFunc("/users", server.GetUsers).Methods("GET")
+	router.HandleFunc("/users", server.CreateUser).Methods("POST")
+
+	server.DB = db
+	server.Router = router
+
+	return server
+}
+
+func (s *Server) GetUsers(w http.ResponseWriter, r *http.Request) {
+	rows, err := s.DB.Query("SELECT * FROM users")
+	if err != nil {
+		log.Print(err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	defer func() {
+		err := rows.Close()
 		if err != nil {
 			log.Print(err)
-			w.WriteHeader(http.StatusInternalServerError)
-			return
 		}
-		defer func() {
-			err := rows.Close()
-			if err != nil {
-				log.Print(err)
-			}
-		}()
+	}()
 
-		users := []User{}
-		for rows.Next() {
-			var u User
-			if err := rows.Scan(&u.ID, &u.Name, &u.Email); err != nil {
-				log.Fatal(err)
-			}
-			users = append(users, u)
+	users := []User{}
+	for rows.Next() {
+		var u User
+		if err := rows.Scan(&u.ID, &u.Name, &u.Email); err != nil {
+			log.Fatal(err)
 		}
-		if err := rows.Err(); err != nil {
-			log.Print(err)
-			return
-		}
+		users = append(users, u)
+	}
+	if err := rows.Err(); err != nil {
+		log.Print(err)
+		return
+	}
 
-		err = json.NewEncoder(w).Encode(users)
-		if err != nil {
-			log.Print(err)
-		}
+	err = json.NewEncoder(w).Encode(users)
+	if err != nil {
+		log.Print(err)
 	}
 }
 
-func createUser(db *sql.DB) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		var u User
-		err := json.NewDecoder(r.Body).Decode(&u)
-		if err != nil {
-			return
-		}
+func (s *Server) CreateUser(w http.ResponseWriter, r *http.Request) {
+	var u User
+	err := json.NewDecoder(r.Body).Decode(&u)
+	if err != nil {
+		return
+	}
 
-		db.QueryRow(
-			"INSERT INTO users (name, email) VALUES ($1, $2) RETURNING id",
-			u.Name, u.Email)
+	s.DB.QueryRow(
+		"INSERT INTO users (name, email) VALUES ($1, $2) RETURNING id",
+		u.Name, u.Email)
 
-		err = json.NewEncoder(w).Encode(u)
-		if err != nil {
-			log.Print(err)
-		}
+	err = json.NewEncoder(w).Encode(u)
+	if err != nil {
+		log.Print(err)
 	}
 }
