@@ -60,6 +60,7 @@ func NewServer(db *sql.DB) *Server {
 	router.HandleFunc("/users", server.GetUsers).Methods("GET")
 	router.HandleFunc("/users", server.CreateUser).Methods("POST")
 	router.HandleFunc("/users/{id}", server.GetUser).Methods("GET")
+	router.HandleFunc("/users/{id}", server.UpdateUser).Methods("PUT")
 
 	server.DB = db
 	server.Router = router
@@ -104,6 +105,7 @@ func (s *Server) CreateUser(w http.ResponseWriter, r *http.Request) {
 	var u User
 	err := json.NewDecoder(r.Body).Decode(&u)
 	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -139,5 +141,31 @@ func (s *Server) GetUser(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Print(err)
 		w.WriteHeader(http.StatusInternalServerError)
+	}
+}
+
+func (s *Server) UpdateUser(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	userID := vars["id"]
+
+	var u User
+	err := json.NewDecoder(r.Body).Decode(&u)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	stmt := `UPDATE users SET name = $1, email = $2 WHERE id = $3`
+	_, err = s.DB.Exec(stmt, u.Name, u.Email, userID)
+	if err != nil {
+		log.Print(err)
+		http.Error(w, "failed to update user", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	err = json.NewEncoder(w).Encode(u)
+	if err != nil {
+		log.Print(err)
 	}
 }

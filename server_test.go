@@ -147,7 +147,41 @@ func TestGetUser(t *testing.T) {
 }
 
 func TestUpdateUser(t *testing.T) {
-	t.Skip("to develop")
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	mock.ExpectExec(
+		"UPDATE users SET name = \\$1, email = \\$2 WHERE id = \\$3").
+		WithArgs("Alice", "alice@email.com", "1").
+		WillReturnResult(sqlmock.NewResult(1, 1))
+
+	server := NewServer(db)
+
+	userUpdate := User{Name: "Alice", Email: "alice@email.com"}
+	requestBody, err := json.Marshal(userUpdate)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	req, err := http.NewRequest(
+		"PUT", "/users/1", bytes.NewBuffer(requestBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rr := httptest.NewRecorder()
+
+	server.Router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("got %v expected %v", rr.Code, http.StatusOK)
+	}
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("there were unfulfilled expectations <%s>", err)
+	}
 }
 
 func TestDeleteUser(t *testing.T) {
